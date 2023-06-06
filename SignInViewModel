@@ -1,0 +1,51 @@
+class SignInViewModel : StateViewModel<SignInScreen, SignInEvent>(), KoinComponent {
+
+    private val repository : SignInRepository by inject()
+    
+    override fun nothingEvent() : SignInEvent = SignInEvent.Noting()
+
+    val intent : (SignInIntent) -> Unit = { intent ->
+        when (intent) {
+            is SignInIntent.InputText -> {
+                currentData().login = intent.text
+                refreshData()
+            }
+            is SignInIntent.Login -> {
+                requestLogin(login = currentData().login)
+            }
+            is SignInIntent.GoToUserAgreement -> {
+                emitEvent(event = SignInEvent.GoToUserAgreement())
+            }
+        }
+    }
+
+    fun init() {
+        initDataState(
+            data = SignInScreen()
+        )
+    }
+
+    private fun requestLogin(login : String) {
+        currentData().loading = true
+        currentData().error = false
+        refreshData()
+        viewModelScope.launch(
+            networkErrorHandler {
+                currentData().loading = false
+                currentData().error = true
+                refreshData()
+                currentData().error = false
+            }
+        ) {
+            val response = repository.auth(login = login)
+            currentData().loading = false
+            currentData().error = false
+            emitEvent(
+                event = SignInEvent.GoToSmsConfirmScreen(
+                    phone = response.data.person.login,
+                    otp = response.data
+                )
+            )
+        }
+    }
+}
