@@ -1,0 +1,128 @@
+class SignInFragment : BaseFragment() {
+
+    private lateinit var binding: SignInFragmentBinding
+    private val viewModel: SignInViewModel by viewModels()
+
+    private var currentExtractedValue: String? = null
+
+    override fun onStop() {
+        super.onStop()
+        currentExtractedValue = null
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        binding = SignInFragmentBinding.inflate(layoutInflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setVersion()
+        addInputMask()
+        addUserAgreementClickListener()
+        setPaddingTopThroughInsets(view = binding.root)
+        binding.buttonSignIn.throttleClick {
+            viewModel.intent(SignInIntent.Login)
+        }
+        lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.CREATED) {
+                viewModel.state.collect { state ->
+                    when (state) {
+                        is StateScreen.StartState -> {
+                            viewModel.init()
+                        }
+
+                        is StateScreen.DataState -> {
+                            state.event.handle()?.let { event ->
+                                handleEvent(event = event)
+                                return@collect
+                            }
+                            updateText(login = state.data.login)
+                            updateButton(login = state.data.login)
+                            loading(loading = state.data.loading)
+                            error(error = state.data.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loading(loading: Boolean) {
+        binding.buttonSignIn.loading = loading
+    }
+
+    private fun error(error: Boolean) {
+        if (error) {
+            showSnackBar(
+                stringRes = R.string.error
+            )
+        }
+    }
+
+    private fun updateButton(login: String) {
+        binding.buttonSignIn.isEnabled = PhoneUtils.isCropPhone(phone = login)
+    }
+
+    private fun updateText(login: String) {
+        if (login != currentExtractedValue) {
+            binding.inputLayoutPhone.editText?.setText(login)
+        }
+    }
+
+    private fun setVersion() {
+        binding.applicationVersion.text = getString(
+            R.string.ver_s, BuildConfig.VERSION_NAME
+        )
+    }
+
+    private fun addInputMask() {
+        binding.inputLayoutPhone.editText?.let {
+            it.maskPhone { result ->
+                currentExtractedValue = result.value
+                viewModel.intent(SignInIntent.InputText(result.value))
+            }
+        }
+    }
+
+    private fun addUserAgreementClickListener() {
+        val userAgreementText = getString(R.string.user_agreement)
+        val spannableTitle = SpannableString(userAgreementText)
+        val clickableSpan: ClickableSpan = object : ClickableSpan() {
+            override fun onClick(widget: View) {
+                viewModel.intent(SignInIntent.GoToUserAgreement)
+            }
+        }
+        spannableTitle.setSpan(
+            clickableSpan,
+            60,
+            userAgreementText.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        binding.userAgreement.movementMethod = LinkMovementMethod.getInstance()
+        binding.userAgreement.text = spannableTitle
+    }
+
+    private fun handleEvent(event: SignInEvent) {
+        when (event) {
+            is SignInEvent.Noting -> {}
+            is SignInEvent.GoToSmsConfirmScreen -> {
+                findNavController().navigate(
+                    SignInFragmentDirections.actionSignInToSmsConfirmation(
+                        otp = event.otp,
+                        value = event.phone,
+                        screenType = ScreenTypeSmsConfirmEnum.SIGN_IN
+                    )
+                )
+            }
+
+            is SignInEvent.GoToUserAgreement -> {
+                //TODO добавить обработку по нажатию на пользовательское соглашение
+            }
+        }
+    }
+}
